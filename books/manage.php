@@ -77,20 +77,28 @@ if (isset($_GET['action']) && $_GET['action'] === 'template') {
     
     // Add headers
     fputcsv($output, [
+        'Order Number*',
         'Book No*',
         'Book Name*',
         'Author Name',
         'Price',
-        'Copies'
+        'Copies',
+        'Buyer Name',
+        'Purchase Date',
+        'Comments'
     ]);
     
     // Add sample data
     fputcsv($output, [
+        '1',
         'B001',
         'Sample Book Title',
         'John Doe',
         '29.99',
-        '1'
+        '1',
+        'Library Committee',
+        date('Y-m-d'),
+        'Sample comment'
     ]);
     
     fclose($output);
@@ -98,7 +106,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'template') {
 }
 
 // Get all books
-$books = mysqli_query($conn, "SELECT * FROM books ORDER BY order_number");
+$books = mysqli_query($conn, "SELECT * FROM books ORDER BY CAST(order_number AS SIGNED) ASC");
 
 // Get the next order number
 $next_order = mysqli_fetch_assoc(mysqli_query($conn, "SELECT MAX(order_number) + 1 as next FROM books"))['next'] ?: 1;

@@ -25,25 +25,33 @@ function exportBooks($conn) {
     
     // Add headers
     fputcsv($output, [
+        'Order Number*',
         'Book No*',
         'Book Name*',
         'Author Name',
         'Price',
-        'Copies'
+        'Copies',
+        'Buyer Name',
+        'Purchase Date',
+        'Comments'
     ]);
     
     // Get books data
-    $query = "SELECT book_no, book_name, author_name, price, copies FROM books ORDER BY id";
+    $query = "SELECT order_number, book_no, book_name, author_name, price, copies, buyer_name, purchase_date, comments FROM books ORDER BY CAST(order_number AS SIGNED) ASC";
     $result = mysqli_query($conn, $query);
     
     // Add data rows
     while ($row = mysqli_fetch_assoc($result)) {
         fputcsv($output, [
+            $row['order_number'],
             $row['book_no'],
             $row['book_name'],
             $row['author_name'],
             $row['price'],
-            $row['copies']
+            $row['copies'],
+            $row['buyer_name'],
+            $row['purchase_date'],
+            $row['comments']
         ]);
     }
     
@@ -89,7 +97,7 @@ function importBooks($conn, $file) {
         debug_log("Header row: " . print_r($header, true));
         
         // Verify header format
-        $expected_headers = ['Book No*', 'Book Name*', 'Author Name', 'Price', 'Copies'];
+        $expected_headers = ['Order Number*', 'Book No*', 'Book Name*', 'Author Name', 'Price', 'Copies', 'Buyer Name', 'Purchase Date', 'Comments'];
         $header = array_map('trim', $header); // Clean up whitespace
         
         // Remove asterisks for comparison
@@ -109,76 +117,58 @@ function importBooks($conn, $file) {
         // Process data rows
         while (($data = fgetcsv($handle)) !== FALSE) {
             $row++;
-            debug_log("Processing row $row: " . print_r($data, true));
             
             // Skip empty rows
             if (empty(array_filter($data))) {
-                debug_log("Skipping empty row $row");
                 continue;
             }
             
-            // Clean data
-            $data = array_map('trim', $data);
+            // Clean and validate data
+            $order_number = isset($data[0]) ? trim($data[0]) : '';
+            $book_no = isset($data[1]) ? trim($data[1]) : '';
+            $book_name = isset($data[2]) ? trim($data[2]) : '';
+            $author_name = isset($data[3]) ? trim($data[3]) : '';
+            $price = isset($data[4]) ? floatval(trim($data[4])) : 0;
+            $copies = isset($data[5]) ? intval(trim($data[5])) : 0;
+            $buyer_name = isset($data[6]) ? trim($data[6]) : '';
+            $purchase_date = isset($data[7]) && !empty($data[7]) ? date('Y-m-d', strtotime(trim($data[7]))) : date('Y-m-d');
+            $comments = isset($data[8]) ? trim($data[8]) : '';
             
             // Validate required fields
-            if (empty($data[0]) || empty($data[1])) {
-                $errors[] = "Row $row: Book No and Book Name are required";
-                debug_log("Missing required fields in row $row");
+            if (empty($book_no) || empty($book_name)) {
+                $errors[] = "Row $row: Book No and Book Name are required fields";
                 continue;
             }
-            
-            try {
-                // Start transaction for this row
-                mysqli_begin_transaction($conn);
-                
-                // Prepare data
-                $book_no = mysqli_real_escape_string($conn, $data[0]);
-                $book_name = mysqli_real_escape_string($conn, $data[1]);
-                $author_name = mysqli_real_escape_string($conn, $data[2] ?? '');
-                $price = !empty($data[3]) ? (float)str_replace(['$', ','], '', $data[3]) : 0;
-                $copies = !empty($data[4]) ? (int)$data[4] : 1;
-                
-                debug_log("Prepared data for row $row: " . print_r([
-                    'book_no' => $book_no,
-                    'book_name' => $book_name,
-                    'author_name' => $author_name,
-                    'price' => $price,
-                    'copies' => $copies
-                ], true));
-                
-                // Check for duplicate book_no
-                $check_query = "SELECT id FROM books WHERE book_no = '$book_no'";
-                $check_result = mysqli_query($conn, $check_query);
-                
-                if (!$check_result) {
-                    throw new Exception("Database error while checking duplicates: " . mysqli_error($conn));
-                }
-                
-                if (mysqli_num_rows($check_result) > 0) {
-                    throw new Exception("Book No '$book_no' already exists");
-                }
-                
-                // Insert book
-                $sql = "INSERT INTO books (book_no, book_name, author_name, price, copies) 
-                        VALUES ('$book_no', '$book_name', '$author_name', $price, $copies)";
-                
-                debug_log("Executing SQL: $sql");
-                
-                if (!mysqli_query($conn, $sql)) {
-                    throw new Exception(mysqli_error($conn));
-                }
-                
-                // Commit transaction
-                mysqli_commit($conn);
-                $success++;
-                debug_log("Successfully imported row $row");
-                
-            } catch (Exception $e) {
-                // Rollback transaction
-                mysqli_rollback($conn);
-                $errors[] = "Row $row: " . $e->getMessage();
-                debug_log("Error in row $row: " . $e->getMessage());
+
+            if (empty($order_number)) {
+                // Get the next order number if not provided
+                $result = mysqli_query($conn, "SELECT MAX(CAST(order_number AS SIGNED)) + 1 as next FROM books");
+                $order_number = mysqli_fetch_assoc($result)['next'] ?: 1;
             }
+            
+            // Insert the book
+            $query = "INSERT INTO books (order_number, book_no, book_name, author_name, price, copies, buyer_name, purchase_date, comments) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            
+            $stmt = mysqli_prepare($conn, $query);
+            mysqli_stmt_bind_param($stmt, 'ssssdisss', 
+                $order_number,
+                $book_no,
+                $book_name,
+                $author_name,
+                $price,
+                $copies,
+                $buyer_name,
+                $purchase_date,
+                $comments
+            );
+            
+            if (!mysqli_stmt_execute($stmt)) {
+                throw new Exception(mysqli_stmt_error($stmt));
+            }
+            
+            $success++;
+            debug_log("Successfully imported row $row");
         }
         
     } catch (Exception $e) {
