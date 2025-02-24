@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS orders (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    book_name VARCHAR(255) NOT NULL,
+    author_name VARCHAR(255) NOT NULL,
+    book_no VARCHAR(50) NOT NULL,
+    copies INT NOT NULL DEFAULT 1,
+    price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    buyer_name VARCHAR(255) NOT NULL,
+    purchase_date DATE NOT NULL,
+    comments TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
