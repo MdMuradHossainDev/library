@@ -64,49 +64,28 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 }
 
-// Handle download template request
-if (isset($_GET['action']) && $_GET['action'] === 'template') {
-    header('Content-Type: text/csv');
-    header('Content-Disposition: attachment; filename="books_import_template.csv"');
-    
-    // Create output stream
-    $output = fopen('php://output', 'w');
-    
-    // Add UTF-8 BOM for proper Excel encoding
-    fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
-    
-    // Add headers
-    fputcsv($output, [
-        'Order Number*',
-        'Book No*',
-        'Book Name*',
-        'Author Name',
-        'Price',
-        'Copies',
-        'Buyer Name',
-        'Purchase Date',
-        'Comments'
-    ]);
-    
-    // Add sample data
-    fputcsv($output, [
-        '1',
-        'B001',
-        'Sample Book Title',
-        'John Doe',
-        '29.99',
-        '1',
-        'Library Committee',
-        date('Y-m-d'),
-        'Sample comment'
-    ]);
-    
-    fclose($output);
-    exit;
+// Initialize variables for pagination
+$records_per_page = 10;
+$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$offset = ($page - 1) * $records_per_page;
+
+// Handle search
+$search = isset($_GET['search']) ? $_GET['search'] : '';
+$search_condition = '';
+if (!empty($search)) {
+    $search = mysqli_real_escape_string($conn, $search);
+    $search_condition = " WHERE book_name LIKE '%$search%' OR book_no LIKE '%$search%'";
 }
 
-// Get all books
-$books = mysqli_query($conn, "SELECT * FROM books ORDER BY CAST(order_number AS SIGNED) ASC");
+// Get total number of books
+$total_query = "SELECT COUNT(*) as total FROM books" . $search_condition;
+$total_result = mysqli_query($conn, $total_query);
+$total_row = mysqli_fetch_assoc($total_result);
+$total_records = $total_row['total'];
+$total_pages = ceil($total_records / $records_per_page);
+
+// Get books for current page
+$books = mysqli_query($conn, "SELECT * FROM books" . $search_condition . " ORDER BY CAST(order_number AS SIGNED) ASC LIMIT $offset, $records_per_page");
 
 // Get the next order number
 $next_order = mysqli_fetch_assoc(mysqli_query($conn, "SELECT MAX(order_number) + 1 as next FROM books"))['next'] ?: 1;
@@ -137,6 +116,15 @@ $next_order = mysqli_fetch_assoc(mysqli_query($conn, "SELECT MAX(order_number) +
             <!-- Main Content -->
             <div class="col-md-9 col-lg-10 content-wrapper">
                 <div class="row mb-4">
+                    <div class="col-12">
+                        <!-- Search Bar -->
+                        <form method="GET" class="mb-4">
+                            <div class="input-group">
+                                <input type="text" name="search" class="form-control" placeholder="Search by book name or book number" value="<?php echo htmlspecialchars($search); ?>">
+                                <button type="submit" class="btn btn-primary">Search</button>
+                            </div>
+                        </form>
+                    </div>
                     <div class="col-12 d-flex justify-content-between align-items-center">
                         <h2>Manage Books</h2>
                         <div class="btn-group">
@@ -207,6 +195,23 @@ $next_order = mysqli_fetch_assoc(mysqli_query($conn, "SELECT MAX(order_number) +
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Pagination -->
+                <div class="d-flex justify-content-center mt-4">
+                    <div class="btn-group">
+                        <?php if($page > 1): ?>
+                            <a href="?page=<?php echo ($page-1); echo !empty($search) ? '&search='.urlencode($search) : ''; ?>" class="btn btn-secondary">Previous</a>
+                        <?php endif; ?>
+
+                        <?php if($page < $total_pages): ?>
+                            <a href="?page=<?php echo ($page+1); echo !empty($search) ? '&search='.urlencode($search) : ''; ?>" class="btn btn-secondary">Next</a>
+                        <?php endif; ?>
+
+                        <?php if($page < $total_pages): ?>
+                            <a href="?page=<?php echo $total_pages; echo !empty($search) ? '&search='.urlencode($search) : ''; ?>" class="btn btn-secondary">Last</a>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>

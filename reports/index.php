@@ -65,21 +65,52 @@ $member_stats = mysqli_fetch_assoc(mysqli_query($conn, "
 "));
 
 // Get monthly borrowing statistics for the past 6 months
-$monthly_stats = mysqli_query($conn, "
-    SELECT 
-        DATE_FORMAT(borrow_date, '%Y-%m') as month,
-        COUNT(*) as borrow_count
-    FROM borrowings
-    WHERE borrow_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
-    GROUP BY month
-    ORDER BY month ASC
-");
+$current_date = date('Y-m-d');
+$six_months_ago = date('Y-m-d', strtotime('-6 months'));
 
+// First, get all months in the range
+$months_query = "
+    SELECT 
+        DATE_FORMAT(date_series.date, '%Y-%m') as month
+    FROM (
+        SELECT DATE_SUB('$current_date', INTERVAL n MONTH) as date
+        FROM (
+            SELECT 0 as n UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5
+        ) numbers
+    ) date_series
+    ORDER BY date_series.date ASC
+";
+
+$months_result = mysqli_query($conn, $months_query);
 $months = [];
 $borrow_counts = [];
-while ($row = mysqli_fetch_assoc($monthly_stats)) {
-    $months[] = date('M Y', strtotime($row['month'] . '-01'));
-    $borrow_counts[] = $row['borrow_count'];
+
+if ($months_result) {
+    while ($month_row = mysqli_fetch_assoc($months_result)) {
+        $month = $month_row['month'];
+        
+        // Get borrowing count for this month
+        $stats_query = "
+            SELECT COUNT(*) as borrow_count
+            FROM borrowings
+            WHERE DATE_FORMAT(borrow_date, '%Y-%m') = '$month'
+        ";
+        
+        $stats_result = mysqli_query($conn, $stats_query);
+        if ($stats_result) {
+            $stats_row = mysqli_fetch_assoc($stats_result);
+            $months[] = date('M Y', strtotime($month . '-01'));
+            $borrow_counts[] = (int)$stats_row['borrow_count'];
+        }
+    }
+}
+
+// Ensure we have data
+if (empty($months)) {
+    $months = array_map(function($i) {
+        return date('M Y', strtotime("-$i month"));
+    }, range(5, 0));
+    $borrow_counts = array_fill(0, 6, 0);
 }
 ?>
 
@@ -316,31 +347,77 @@ while ($row = mysqli_fetch_assoc($monthly_stats)) {
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
-        // Initialize the borrowing chart
-        const ctx = document.getElementById('borrowingChart').getContext('2d');
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: <?php echo json_encode($months); ?>,
-                datasets: [{
-                    label: 'Number of Borrowings',
-                    data: <?php echo json_encode($borrow_counts); ?>,
-                    fill: false,
-                    borderColor: 'rgb(75, 192, 192)',
-                    tension: 0.1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            stepSize: 1
+        document.addEventListener('DOMContentLoaded', function() {
+            const chartCanvas = document.getElementById('borrowingChart');
+            if (!chartCanvas) {
+                console.error('Chart canvas element not found');
+                return;
+            }
+
+            try {
+                const ctx = chartCanvas.getContext('2d');
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: <?php echo json_encode($months); ?>,
+                        datasets: [{
+                            label: 'Number of Borrowings',
+                            data: <?php echo json_encode($borrow_counts); ?>,
+                            fill: true,
+                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            borderColor: 'rgb(75, 192, 192)',
+                            tension: 0.3,
+                            pointRadius: 4,
+                            pointBackgroundColor: 'rgb(75, 192, 192)'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    stepSize: 1,
+                                    font: {
+                                        size: 12
+                                    }
+                                },
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.1)'
+                                }
+                            },
+                            x: {
+                                ticks: {
+                                    font: {
+                                        size: 12
+                                    }
+                                },
+                                grid: {
+                                    display: false
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top'
+                            },
+                            tooltip: {
+                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                padding: 12,
+                                titleFont: {
+                                    size: 14
+                                },
+                                bodyFont: {
+                                    size: 13
+                                }
+                            }
                         }
                     }
-                }
+                });
+            } catch (error) {
+                console.error('Error initializing chart:', error);
             }
         });
     </script>

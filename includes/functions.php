@@ -174,3 +174,68 @@ function get_active_members($conn, $limit = 5) {
         LIMIT $limit
     ");
 }
+
+/**
+ * Send email notification for book borrowing
+ */
+function sendBorrowingEmail($memberEmail, $memberName, $bookName, $borrowDate, $dueDate) {
+    require_once __DIR__ . '/email_config.php';
+
+    // Format dates
+    $borrowDateFormatted = date('F j, Y', strtotime($borrowDate));
+    $dueDateFormatted = date('F j, Y', strtotime($dueDate));
+
+    // Email subject
+    $subject = 'Book Borrowing Confirmation';
+
+    // Email headers
+    $headers = array(
+        'MIME-Version: 1.0',
+        'Content-Type: text/html; charset=UTF-8',
+        'From: ' . MAIL_FROM_NAME . ' <' . MAIL_FROM . '>',
+        'Reply-To: ' . MAIL_FROM,
+        'X-Mailer: PHP/' . phpversion()
+    );
+
+    // Email body
+    $body = "
+        <html>
+        <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333;'>
+            <div style='max-width: 600px; margin: 0 auto; padding: 20px;'>
+                <h2 style='color: #2c3e50;'>Book Borrowing Confirmation</h2>
+                <p>Dear {$memberName},</p>
+                <p>This email confirms that you have borrowed the following book from our library:</p>
+                
+                <div style='background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;'>
+                    <p><strong>Book:</strong> {$bookName}</p>
+                    <p><strong>Borrow Date:</strong> {$borrowDateFormatted}</p>
+                    <p><strong>Due Date:</strong> {$dueDateFormatted}</p>
+                </div>
+                
+                <p>Please ensure to return the book by the due date to avoid any late fees.</p>
+                
+                <p style='margin-top: 20px;'>
+                    Thank you for using our library services!<br>
+                    Best regards,<br>
+                    Library Management Team
+                </p>
+            </div>
+        </body>
+        </html>
+    ";
+
+    // Log attempt
+    error_log("Attempting to send email to: $memberEmail");
+
+    // Send email
+    $success = mail($memberEmail, $subject, $body, implode("\r\n", $headers));
+
+    // Log result
+    if ($success) {
+        error_log("Email sent successfully to: $memberEmail");
+        return true;
+    } else {
+        error_log("Failed to send email to: $memberEmail");
+        return false;
+    }
+}

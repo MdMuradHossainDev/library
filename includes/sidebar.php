@@ -13,7 +13,7 @@ $base_url = '/library management system';
 <div class="col-md-3 col-lg-2 sidebar">
     <div class="text-center mb-4">
         <i class="fas fa-book-reader fa-3x text-white"></i>
-        <h4 class="text-white mt-2">চাঁদখালী জামে মসজিদ</h4>
+        <h4 class="text-white mt-2">মেরিট কেয়ার একাডেমি</h4>
     </div>
     <ul class="nav flex-column">
         <li class="nav-item">

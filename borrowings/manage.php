@@ -416,3 +416,27 @@ $members = mysqli_query($conn, "SELECT id, member_id, name FROM members WHERE st
     </script>
 </body>
 </html>
+
+                    type: 'POST',
+                    url: window.location.href,
+                    data: {
+                        action: 'return',
+                        borrowing_id: borrowingId
+                    },
+                    dataType: 'json',
+                    success: function(response) {
+                        if (response.success) {
+                            window.location.reload();
+                        } else {
+                            alert(response.error || 'Error returning book');
+                        }
+                    },
+                    error: function() {
+                        alert('Error returning book. Please try again.');
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
